@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Phishing Email Detection Model</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Clash+Display:wght@500;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f5f3ee;
+  --surface:#ffffff;
+  --surface2:#f0ede6;
+  --border:#ddd9d0;
+  --border2:#c8c3b8;
+  --text:#1a1814;
+  --muted:#6b6760;
+  --muted2:#9b9690;
+  --safe:#1a6b3a;
+  --safe-bg:#e8f5ed;
+  --safe-border:#a3d4b3;
+  --phish:#8b1a1a;
+  --phish-bg:#fdeaea;
+  --phish-border:#e8a8a8;
+  --warn:#7a4f00;
+  --warn-bg:#fff8e6;
+  --accent:#2952c8;
+  --accent-bg:#eef2fc;
+  --font-mono:'IBM Plex Mono',monospace;
+  --font-display:'Clash Display','Georgia',serif;
+}
+
+html{background:var(--bg);}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-mono);
+  min-height:100vh;
+  padding:0;
+}
+
+.layout{
+  display:grid;
+  grid-template-columns:1fr;
+  max-width:960px;
+  margin:0 auto;
+  padding:2.5rem 1.5rem 4rem;
+  gap:1.5rem;
+}
+
+/* HEADER */
+.header{text-align:center;padding-bottom:1rem;animation:rise 0.5s ease both;}
+.header-eyebrow{
+  font-size:11px;letter-spacing:0.25em;color:var(--muted);
+  text-transform:uppercase;margin-bottom:10px;
+}
+h1{
+  font-family:var(--font-display);
+  font-size:clamp(26px,5vw,42px);
+  font-weight:700;
+  line-height:1.1;
+  color:var(--text);
+  letter-spacing:-0.01em;
+}
+h1 em{font-style:normal;color:var(--accent);}
+.header-sub{
+  font-size:13px;color:var(--muted);margin-top:8px;
+  font-family:var(--font-mono);line-height:1.6;
+}
+
+/* CARDS */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  overflow:hidden;
+  animation:rise 0.5s ease both;
+}
+.card-header{
+  padding:14px 20px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+  background:var(--surface2);
+}
+.card-title{font-size:11px;letter-spacing:0.16em;color:var(--muted);text-transform:uppercase;font-weight:500;}
+.card-body{padding:1.5rem 1.5rem;}
+
+/* TABS: dataset / classifier / test */
+.tabs{display:flex;border-bottom:1px solid var(--border);}
+.tab{
+  padding:10px 18px;font-size:12px;letter-spacing:0.1em;
+  border:none;background:none;cursor:pointer;color:var(--muted);
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  font-family:var(--font-mono);transition:color 0.2s,border-color 0.2s;
+}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab:hover:not(.active){color:var(--text);}
+.tab-panel{display:none;padding:1.5rem;}
+.tab-panel.active{display:block;}
+
+/* DATASET TABLE */
+.dataset-table{width:100%;border-collapse:collapse;font-size:12px;}
+.dataset-table th{
+  text-align:left;padding:8px 12px;font-size:10px;letter-spacing:0.14em;
+  color:var(--muted);border-bottom:1px solid var(--border);font-weight:500;
+}
+.dataset-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.5;}
+.dataset-table tr:last-child td{border-bottom:none;}
+.dataset-table tr:hover td{background:var(--surface2);}
+.label-phish{
+  display:inline-block;font-size:10px;padding:2px 8px;border-radius:3px;
+  background:var(--phish-bg);color:var(--phish);border:1px solid var(--phish-border);
+  font-weight:500;white-space:nowrap;
+}
+.label-safe{
+  display:inline-block;font-size:10px;padding:2px 8px;border-radius:3px;
+  background:var(--safe-bg);color:var(--safe);border:1px solid var(--safe-border);
+  font-weight:500;white-space:nowrap;
+}
+.feat-pill{
+  display:inline-block;font-size:10px;padding:1px 6px;border-radius:2px;
+  background:var(--accent-bg);color:var(--accent);margin:1px;border:1px solid #c5d0f0;
+}
+
+/* TRAIN BUTTON */
+.train-btn{
+  width:100%;padding:13px;background:var(--accent);border:none;border-radius:8px;
+  color:#fff;font-family:var(--font-display);font-size:14px;font-weight:700;
+  letter-spacing:0.04em;cursor:pointer;transition:opacity 0.2s,transform 0.1s;margin-top:1rem;
+}
+.train-btn:hover{opacity:0.9;}
+.train-btn:active{transform:scale(0.98);}
+.train-btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* METRICS */
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:1.5rem;}
+.metric-box{
+  background:var(--surface2);border-radius:8px;padding:14px 12px;text-align:center;
+  border:1px solid var(--border);
+}
+.metric-val{font-family:var(--font-display);font-size:28px;font-weight:700;color:var(--accent);line-height:1;}
+.metric-lbl{font-size:10px;color:var(--muted);letter-spacing:0.12em;margin-top:5px;text-transform:uppercase;}
+
+/* CONFUSION MATRIX */
+.cm-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;margin:1rem 0;}
+.cm-grid{display:grid;grid-template-columns:auto auto auto;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.cm-cell{
+  width:90px;height:70px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-size:11px;
+}
+.cm-header{background:var(--surface2);color:var(--muted);font-size:10px;letter-spacing:0.1em;border:1px solid var(--border);}
+.cm-tp{background:#d4edda;color:#155724;}
+.cm-fp{background:#f8d7da;color:#721c24;}
+.cm-fn{background:#fff3cd;color:#856404;}
+.cm-tn{background:#d4edda;color:#155724;}
+.cm-num{font-family:var(--font-display);font-size:22px;font-weight:700;line-height:1;}
+.cm-sub{font-size:10px;opacity:0.8;margin-top:2px;}
+.cm-axis{font-size:10px;letter-spacing:0.1em;color:var(--muted);text-align:center;}
+
+/* REPORT TABLE */
+.report-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:1rem;}
+.report-table th{
+  padding:7px 12px;font-size:10px;letter-spacing:0.12em;color:var(--muted);
+  border-bottom:1px solid var(--border);text-align:left;font-weight:500;
+}
+.report-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
+.report-table tr:last-child td{border-bottom:none;}
+.bar-wrap{background:var(--surface2);border-radius:3px;height:7px;width:80px;display:inline-block;vertical-align:middle;margin-left:6px;}
+.bar-fill{height:100%;border-radius:3px;background:var(--accent);}
+
+/* TEST SECTION */
+.email-input{
+  width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:14px;font-family:var(--font-mono);font-size:13px;color:var(--text);
+  resize:vertical;min-height:130px;outline:none;line-height:1.6;transition:border-color 0.2s;
+}
+.email-input:focus{border-color:var(--accent);}
+.email-input::placeholder{color:var(--muted2);}
+
+.quick-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.quick-btn{
+  font-size:11px;padding:5px 12px;border:1px solid var(--border2);border-radius:5px;
+  background:var(--surface2);color:var(--muted);cursor:pointer;font-family:var(--font-mono);
+  transition:border-color 0.2s,color 0.2s;
+}
+.quick-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+.analyze-btn{
+  margin-top:12px;padding:12px 28px;background:var(--accent);border:none;border-radius:8px;
+  color:#fff;font-family:var(--font-display);font-size:13px;font-weight:700;cursor:pointer;
+  transition:opacity 0.2s,transform 0.1s;letter-spacing:0.04em;
+}
+.analyze-btn:hover{opacity:0.9;}
+.analyze-btn:active{transform:scale(0.97);}
+.analyze-btn:disabled{opacity:0.35;cursor:not-allowed;}
+
+/* RESULT */
+.result-box{
+  border-radius:10px;padding:1.25rem 1.5rem;margin-top:1.25rem;
+  border:1px solid;animation:rise 0.35s ease both;
+}
+.result-box.phishing{background:var(--phish-bg);border-color:var(--phish-border);}
+.result-box.safe{background:var(--safe-bg);border-color:var(--safe-border);}
+.result-box.unknown{background:var(--warn-bg);border-color:#e8c87a;}
+.result-header{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.result-icon{font-size:28px;}
+.result-verdict{font-family:var(--font-display);font-size:22px;font-weight:700;}
+.result-verdict.phishing{color:var(--phish);}
+.result-verdict.safe{color:var(--safe);}
+.result-verdict.unknown{color:var(--warn);}
+.result-conf{font-size:12px;color:var(--muted);margin-top:2px;}
+.conf-bar-track{height:6px;background:rgba(0,0,0,0.08);border-radius:99px;margin:6px 0 12px;overflow:hidden;}
+.conf-bar-fill{height:100%;border-radius:99px;transition:width 0.5s ease;}
+.conf-fill-phish{background:var(--phish);}
+.conf-fill-safe{background:var(--safe);}
+
+.signals-title{font-size:11px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+.signal-list{display:flex;flex-wrap:wrap;gap:6px;}
+.signal-tag{
+  font-size:11px;padding:3px 9px;border-radius:4px;
+  background:rgba(139,26,26,0.08);color:var(--phish);border:1px solid var(--phish-border);
+}
+.signal-tag.safe-tag{background:rgba(26,107,58,0.08);color:var(--safe);border-color:var(--safe-border);}
+.no-signal{font-size:12px;color:var(--muted2);font-style:italic;}
+
+.feature-breakdown{margin-top:12px;font-size:12px;}
+.fb-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);color:var(--muted);}
+.fb-row:last-child{border-bottom:none;}
+.fb-val{color:var(--text);font-weight:500;}
+
+/* HISTORY */
+.history-list{display:flex;flex-direction:column;gap:6px;}
+.history-item{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;
+  background:var(--surface2);border:1px solid var(--border);border-radius:7px;
+  font-size:12px;cursor:pointer;transition:border-color 0.2s;
+}
+.history-item:hover{border-color:var(--border2);}
+.history-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.history-text{flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.history-badge{font-size:10px;padding:2px 7px;border-radius:3px;flex-shrink:0;}
+
+@keyframes rise{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-eyebrow">Machine Learning · Scikit-learn (JS Port)</div>
+    <h1>Phishing <em>Email</em><br>Detection Model</h1>
+    <p class="header-sub">Naive Bayes classifier · TF-IDF features · URL + keyword analysis</p>
+  </div>
+
+  <!-- MAIN CARD WITH TABS -->
+  <div class="card" style="animation-delay:0.05s">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('dataset',this)">① Dataset</button>
+      <button class="tab" onclick="switchTab('classifier',this)">② Train Model</button>
+      <button class="tab" onclick="switchTab('test',this)">③ Detect Email</button>
+      <button class="tab" onclick="switchTab('history',this)">④ History</button>
+    </div>
+
+    <!-- DATASET TAB -->
+    <div class="tab-panel active" id="tab-dataset">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
+        Training dataset: <strong style="color:var(--text);">40 labeled emails</strong> — 20 phishing, 20 legitimate. Features extracted: TF-IDF word scores, URL count, phishing keyword count, email length.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="dataset-table">
+          <thead><tr><th>#</th><th>Email Preview</th><th>URLs</th><th>Keywords</th><th>Label</th></tr></thead>
+          <tbody id="datasetBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CLASSIFIER TAB -->
+    <div class="tab-panel" id="tab-classifier">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:1.25rem;line-height:1.6;">
+        Click <strong style="color:var(--text);">Train Model</strong> to run the Multinomial Naive Bayes classifier on the dataset. The model splits 80% training / 20% testing and reports accuracy, precision, recall, and F1 score.
+      </p>
+      <button class="train-btn" id="trainBtn" onclick="trainModel()">▶ Train Naive Bayes Classifier</button>
+      <div id="classifierResults" style="display:none;margin-top:1.5rem;">
+        <div class="metrics-grid" id="metricsGrid"></div>
+        <p style="font-size:11px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">Confusion Matrix</p>
+        <div class="cm-wrap">
+          <div style="font-size:11px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;align-self:flex-start;margin-left:96px;">Predicted →</div>
+          <div style="display:flex;gap:0;align-items:center;">
+            <div style="writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-right:8px;">Actual →</div>
+            <div class="cm-grid" id="cmGrid"></div>
+          </div>
+        </div>
+        <p style="font-size:11px;letter-spacing:0.14em;color:var(--muted);text-transform:uppercase;margin:1.25rem 0 0;">Classification Report</p>
+        <table class="report-table" id="reportTable">
+          <thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1-Score</th><th>Support</th></tr></thead>
+          <tbody id="reportBody"></tbody>
+        </table>
+        <div style="margin-top:1rem;padding:12px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.7;">
+          <strong style="color:var(--text);">Top phishing indicator words (by weight):</strong><br/>
+          <div id="topWords" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEST TAB -->
+    <div class="tab-panel" id="tab-test">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
+        Paste any email text below. The model extracts features and classifies it as <strong style="color:var(--phish);">Phishing</strong> or <strong style="color:var(--safe);">Safe</strong>.
+      </p>
+      <textarea class="email-input" id="emailInput" placeholder="Paste email text here...&#10;&#10;e.g. Dear customer, your account has been suspended. Click here to verify your identity immediately: http://secure-login.xyz/verify"></textarea>
+      <div class="quick-row">
+        <span style="font-size:11px;color:var(--muted2);align-self:center;">Quick examples:</span>
+        <button class="quick-btn" onclick="loadExample('phish1')">Phishing #1</button>
+        <button class="quick-btn" onclick="loadExample('phish2')">Phishing #2</button>
+        <button class="quick-btn" onclick="loadExample('safe1')">Legitimate #1</button>
+        <button class="quick-btn" onclick="loadExample('safe2')">Legitimate #2</button>
+      </div>
+      <div>
+        <button class="analyze-btn" id="analyzeBtn" onclick="analyzeEmail()" disabled>Analyze Email</button>
+        <span id="trainWarning" style="font-size:12px;color:var(--warn);margin-left:12px;">← Train the model first (tab ②)</span>
+      </div>
+      <div id="resultBox"></div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div class="tab-panel" id="tab-history">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Recent classifications from this session.</p>
+      <div class="history-list" id="historyList">
+        <p style="font-size:13px;color:var(--muted2);font-style:italic;">No emails analyzed yet. Go to tab ③ to start.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// DATASET — 40 labeled emails
+// ─────────────────────────────────────────────
+
+const DATASET = [
+  // PHISHING (label=1)
+  {text:"URGENT: Your account has been suspended. Click here immediately to verify your identity and restore access: http://secure-login-verify.xyz/account", label:1},
+  {text:"Congratulations! You have won a FREE iPhone 14. Claim your prize now before it expires: http://bit.ly/freeiphone-claim2024", label:1},
+  {text:"Your PayPal account is limited. Please verify your banking information to avoid permanent suspension. Login: http://paypal-secure.tk/verify", label:1},
+  {text:"Dear valued customer, suspicious activity detected on your bank account. Confirm your details here: http://bankofamerica-secure.ru/confirm", label:1},
+  {text:"You have a pending package delivery. Pay the customs fee of $2.99 to release it: http://fedex-delivery.ml/pay", label:1},
+  {text:"WINNER NOTIFICATION: You have been selected for a $1000 Amazon gift card. Click to claim: http://amazon-gifts.tk/winner", label:1},
+  {text:"Your Netflix subscription has expired. Update your payment method now or lose access: http://netflix-billing.xyz/update", label:1},
+  {text:"IRS TAX REFUND: You are eligible for a $3,200 refund. Verify your SSN to process: http://irs-refund.ml/claim", label:1},
+  {text:"SECURITY ALERT: Your Microsoft account password was changed. If not you, reset immediately: http://microsoft-secure.tk/reset", label:1},
+  {text:"Your Apple ID has been compromised. Urgent action required. Verify account: http://apple-id-verify.ru/secure", label:1},
+  {text:"FREE crypto bonus! Claim 0.5 BTC limited offer expires in 24 hours. Register here: http://bit.ly/crypto-free-btc", label:1},
+  {text:"IMPORTANT: Your email storage is full. Click to upgrade for free or lose your emails: http://gmail-upgrade.tk/free", label:1},
+  {text:"Your DHL shipment requires customs payment immediately. Pay $1.50 to release: http://dhl-customs.ml/payment", label:1},
+  {text:"Verify your identity now or your account will be permanently deleted. Act immediately: http://securebank.xyz/verify", label:1},
+  {text:"You have unclaimed lottery winnings of $50,000. Provide your details to claim: http://lottery-claim.tk/winner", label:1},
+  {text:"FINAL WARNING: Your credit card will be charged $129. Cancel subscription here: http://cancel-subscription.ru/now", label:1},
+  {text:"Someone tried to log into your account from Russia. Secure your account now: http://account-secure.xyz/login", label:1},
+  {text:"Dear user click here to update your banking credentials immediately urgent action required: http://secure-bank-update.ml", label:1},
+  {text:"Your social security number has been suspended by the government. Call or click here urgently: http://ssa-suspend.tk/help", label:1},
+  {text:"Limited time offer! Get free gift cards worth $500 just verify your email: http://giftcard-free.xyz/verify", label:1},
+  // LEGITIMATE (label=0)
+  {text:"Hi team, please find attached the agenda for tomorrow's project meeting at 2pm. Let me know if you have any additions.", label:0},
+  {text:"Hey, are you free for lunch on Thursday? There's a new place that opened downtown I wanted to try.", label:0},
+  {text:"Your Amazon order #112-3456789 has shipped. Expected delivery: Tuesday, May 27. Track on the Amazon website.", label:0},
+  {text:"Monthly newsletter: Here are the top articles from our blog this month. Unsubscribe anytime at the bottom of this email.", label:0},
+  {text:"Hi Sarah, thanks for your application. We'd like to schedule an interview for next week. Please reply with your availability.", label:0},
+  {text:"Reminder: your dentist appointment is on Friday June 3rd at 10am. Call us at (555) 123-4567 to reschedule.", label:0},
+  {text:"Good morning, here is your daily summary report for the sales team. Total revenue this week: $42,300.", label:0},
+  {text:"Your GitHub repository has a new pull request from contributor john-dev. Review it at github.com.", label:0},
+  {text:"Hi there! Just checking in to see how the project is going. No rush, just wanted to catch up.", label:0},
+  {text:"Your subscription to Spotify Premium has been renewed. Your next billing date is June 23rd. Manage at spotify.com.", label:0},
+  {text:"Meeting notes from today's standup are attached. Action items assigned to each team member as discussed.", label:0},
+  {text:"Hello, your flight booking confirmation number is AB12345. Check in online at the airline website 24 hours before.", label:0},
+  {text:"The quarterly board report is ready for review. Please read before the board meeting on Friday.", label:0},
+  {text:"Happy birthday! Hope you have a wonderful day celebrating with friends and family. Let's catch up soon.", label:0},
+  {text:"Your annual software license has been renewed automatically. Invoice attached for your records.", label:0},
+  {text:"Hi, I'm reaching out because we met at the conference last week. I'd love to connect and discuss potential collaboration.", label:0},
+  {text:"The IT team will be performing maintenance on Sunday from 2am to 4am. Services may be briefly unavailable.", label:0},
+  {text:"Your package has been delivered to the front door. Photo confirmation available in the carrier app.", label:0},
+  {text:"Good news: your mortgage application has been approved. Please call your loan officer to discuss the next steps.", label:0},
+  {text:"Reminder: please submit your timesheet by end of day Friday. Contact HR if you have any questions.", label:0},
+];
+
+// ─────────────────────────────────────────────
+// FEATURE EXTRACTION
+// ─────────────────────────────────────────────
+
+const PHISH_KEYWORDS = [
+  'urgent','immediately','suspended','verify','click here','free','winner','won',
+  'prize','claim','limited','expires','warning','alert','confirm','secure','update',
+  'validate','restricted','unusual','suspicious','compromised','locked','action required',
+  'final notice','congratulations','selected','refund','bonus','gift','password',
+  'banking','credentials','account number','social security','ssn','login','illegal'
+];
+
+function countUrls(text){
+  return (text.match(/https?:\/\/\S+|bit\.ly\S*|http\S*/gi)||[]).length;
+}
+
+function countPhishKeywords(text){
+  const lower = text.toLowerCase();
+  let count=0;
+  for(const kw of PHISH_KEYWORDS){
+    if(lower.includes(kw)) count++;
+  }
+  return count;
+}
+
+function extractKeywordsFound(text){
+  const lower = text.toLowerCase();
+  return PHISH_KEYWORDS.filter(kw=>lower.includes(kw));
+}
+
+function tokenize(text){
+  return text.toLowerCase()
+    .replace(/https?:\/\/\S+/g,' ')
+    .replace(/[^a-z\s]/g,' ')
+    .split(/\s+/)
+    .filter(w=>w.length>2 && !['the','and','for','are','but','not','you','all','can','was','her','his','they','with','this','that','from','have','been','will','your','has'].includes(w));
+}
+
+// TF-IDF (simplified)
+function buildVocab(docs){
+  const vocab={};
+  let idx=0;
+  for(const doc of docs){
+    for(const w of new Set(tokenize(doc))){
+      if(!(w in vocab)) vocab[w]=idx++;
+    }
+  }
+  return vocab;
+}
+
+function tfIdf(text, vocab, idf){
+  const tokens=tokenize(text);
+  const tf={};
+  for(const t of tokens) tf[t]=(tf[t]||0)+1;
+  const vec=new Array(Object.keys(vocab).length).fill(0);
+  for(const [w,cnt] of Object.entries(tf)){
+    if(w in vocab){
+      vec[vocab[w]] = (cnt/tokens.length) * (idf[w]||1);
+    }
+  }
+  return vec;
+}
+
+function computeIdf(docs,vocab){
+  const N=docs.length;
+  const df={};
+  for(const doc of docs){
+    for(const w of new Set(tokenize(doc))){
+      df[w]=(df[w]||0)+1;
+    }
+  }
+  const idf={};
+  for(const w of Object.keys(vocab)){
+    idf[w]=Math.log((N+1)/((df[w]||0)+1))+1;
+  }
+  return idf;
+}
+
+function extractFeatures(text, vocab, idf){
+  const tfidfVec = tfIdf(text, vocab, idf);
+  const urlCount = countUrls(text)/5;
+  const kwCount  = countPhishKeywords(text)/10;
+  const len      = Math.min(text.length/500,1);
+  return [...tfidfVec, urlCount, kwCount, len];
+}
+
+// ─────────────────────────────────────────────
+// NAIVE BAYES CLASSIFIER
+// ─────────────────────────────────────────────
+
+class NaiveBayes {
+  constructor(alpha=1){
+    this.alpha=alpha;
+    this.classPrior={};
+    this.featureProb={};
+    this.classes=[];
+    this.vocabSize=0;
+  }
+
+  fit(X, y){
+    this.classes=[...new Set(y)].sort();
+    this.vocabSize=X[0].length;
+    const counts={};
+    const totals={};
+    const classCounts={};
+
+    for(const c of this.classes){
+      counts[c]=new Array(this.vocabSize).fill(0);
+      totals[c]=0;
+      classCounts[c]=0;
+    }
+    for(let i=0;i<X.length;i++){
+      const c=y[i];
+      classCounts[c]++;
+      for(let j=0;j<this.vocabSize;j++){
+        counts[c][j]+=X[i][j];
+        totals[c]+=X[i][j];
+      }
+    }
+    this.classPrior={};
+    for(const c of this.classes){
+      this.classPrior[c]=Math.log(classCounts[c]/y.length);
+    }
+    this.featureProb={};
+    for(const c of this.classes){
+      this.featureProb[c]=counts[c].map(v=>
+        Math.log((v+this.alpha)/(totals[c]+this.alpha*this.vocabSize))
+      );
+    }
+  }
+
+  predictProba(x){
+    const scores={};
+    for(const c of this.classes){
+      let s=this.classPrior[c];
+      for(let j=0;j<x.length;j++) s+=x[j]*this.featureProb[c][j];
+      scores[c]=s;
+    }
+    // softmax
+    const maxS=Math.max(...Object.values(scores));
+    const expScores={};
+    let sumExp=0;
+    for(const c of this.classes){
+      expScores[c]=Math.exp(scores[c]-maxS);
+      sumExp+=expScores[c];
+    }
+    const proba={};
+    for(const c of this.classes) proba[c]=expScores[c]/sumExp;
+    return proba;
+  }
+
+  predict(x){
+    const p=this.predictProba(x);
+    return parseInt(Object.entries(p).sort((a,b)=>b[1]-a[1])[0][0]);
+  }
+}
+
+// ─────────────────────────────────────────────
+// GLOBAL STATE
+// ─────────────────────────────────────────────
+
+let model=null, vocab=null, idf=null, trained=false;
+let history=[];
+
+// ─────────────────────────────────────────────
+// RENDER DATASET TABLE
+// ─────────────────────────────────────────────
+
+function renderDataset(){
+  const tbody=document.getElementById('datasetBody');
+  tbody.innerHTML=DATASET.slice(0,12).map((row,i)=>{
+    const urls=countUrls(row.text);
+    const kws=extractKeywordsFound(row.text).slice(0,3);
+    const preview=row.text.replace(/https?:\/\/\S+/g,'[URL]').slice(0,80)+'…';
+    const badge=row.label===1
+      ?'<span class="label-phish">Phishing</span>'
+      :'<span class="label-safe">Safe</span>';
+    const kwPills=kws.map(k=>`<span class="feat-pill">${k}</span>`).join('')||'<span style="color:var(--muted2);font-size:11px;">—</span>';
+    return `<tr>
+      <td style="color:var(--muted2);font-size:11px;">${i+1}</td>
+      <td style="max-width:300px;">${preview}</td>
+      <td style="text-align:center;color:${urls>0?'var(--phish)':'var(--muted)'};font-weight:500;">${urls}</td>
+      <td>${kwPills}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('')
+  +`<tr><td colspan="5" style="text-align:center;color:var(--muted2);font-size:11px;padding:10px;">… and ${DATASET.length-12} more rows (${DATASET.filter(d=>d.label===1).length} phishing, ${DATASET.filter(d=>d.label===0).length} safe)</td></tr>`;
+}
+
+// ─────────────────────────────────────────────
+// TRAIN MODEL
+// ─────────────────────────────────────────────
+
+function trainModel(){
+  const btn=document.getElementById('trainBtn');
+  btn.textContent='Training…';btn.disabled=true;
+
+  setTimeout(()=>{
+    // Build vocab + IDF
+    vocab=buildVocab(DATASET.map(d=>d.text));
+    idf=computeIdf(DATASET.map(d=>d.text),vocab);
+
+    // Shuffle + split 80/20
+    const shuffled=[...DATASET].sort(()=>Math.random()-0.5);
+    const splitAt=Math.floor(shuffled.length*0.8);
+    const trainSet=shuffled.slice(0,splitAt);
+    const testSet =shuffled.slice(splitAt);
+
+    const X_train=trainSet.map(d=>extractFeatures(d.text,vocab,idf));
+    const y_train=trainSet.map(d=>d.label);
+    const X_test =testSet.map(d=>extractFeatures(d.text,vocab,idf));
+    const y_test =testSet.map(d=>d.label);
+
+    model=new NaiveBayes(0.5);
+    model.fit(X_train,y_train);
+
+    // Evaluate
+    const y_pred=X_test.map(x=>model.predict(x));
+    let tp=0,tn=0,fp=0,fn=0;
+    for(let i=0;i<y_test.length;i++){
+      if(y_test[i]===1&&y_pred[i]===1) tp++;
+      else if(y_test[i]===0&&y_pred[i]===0) tn++;
+      else if(y_test[i]===0&&y_pred[i]===1) fp++;
+      else fn++;
+    }
+    const accuracy =((tp+tn)/y_test.length*100).toFixed(1);
+    const precision=tp+fp>0?(tp/(tp+fp)*100).toFixed(1):'0.0';
+    const recall   =tp+fn>0?(tp/(tp+fn)*100).toFixed(1):'0.0';
+    const f1       =(2*parseFloat(precision)*parseFloat(recall)/(parseFloat(precision)+parseFloat(recall)||1)).toFixed(1);
+
+    // Metrics
+    document.getElementById('metricsGrid').innerHTML=
+      metricBox(accuracy+'%','Accuracy')+
+      metricBox(precision+'%','Precision')+
+      metricBox(recall+'%','Recall')+
+      metricBox(f1+'%','F1-Score');
+
+    // Confusion matrix
+    document.getElementById('cmGrid').innerHTML=`
+      <div class="cm-cell cm-header"></div>
+      <div class="cm-cell cm-header">Phishing</div>
+      <div class="cm-cell cm-header">Safe</div>
+      <div class="cm-cell cm-header">Phishing</div>
+      <div class="cm-cell cm-tp"><div class="cm-num">${tp}</div><div class="cm-sub">True Positive</div></div>
+      <div class="cm-cell cm-fp"><div class="cm-num">${fn}</div><div class="cm-sub">False Negative</div></div>
+      <div class="cm-cell cm-header">Safe</div>
+      <div class="cm-cell cm-fn"><div class="cm-num">${fp}</div><div class="cm-sub">False Positive</div></div>
+      <div class="cm-cell cm-tn"><div class="cm-num">${tn}</div><div class="cm-sub">True Negative</div></div>
+    `;
+
+    // Classification report
+    const phishSupport=y_test.filter(y=>y===1).length;
+    const safeSupport =y_test.filter(y=>y===0).length;
+    const safePrec=(tn+fn>0?(tn/(tn+fn)*100):0).toFixed(1);
+    const safeRec =(tn+fp>0?(tn/(tn+fp)*100):0).toFixed(1);
+    const safeF1 =(2*parseFloat(safePrec)*parseFloat(safeRec)/(parseFloat(safePrec)+parseFloat(safeRec)||1)).toFixed(1);
+    document.getElementById('reportBody').innerHTML=
+      reportRow('Phishing (1)',precision,recall,f1,phishSupport)+
+      reportRow('Safe (0)',safePrec,safeRec,safeF1,safeSupport)+
+      reportRow('Avg',((parseFloat(precision)+parseFloat(safePrec))/2).toFixed(1),
+        ((parseFloat(recall)+parseFloat(safeRec))/2).toFixed(1),
+        ((parseFloat(f1)+parseFloat(safeF1))/2).toFixed(1), y_test.length, true);
+
+    // Top phishing indicator words
+    const phishWeights=model.featureProb[1];
+    const vocabEntries=Object.entries(vocab);
+    const topW=vocabEntries
+      .map(([w,i])=>({w,score:phishWeights[i]-(model.featureProb[0][i]||0)}))
+      .sort((a,b)=>b.score-a.score)
+      .slice(0,16);
+    document.getElementById('topWords').innerHTML=
+      topW.map(t=>`<span class="feat-pill">${t.w}</span>`).join('');
+
+    document.getElementById('classifierResults').style.display='block';
+    trained=true;
+    document.getElementById('analyzeBtn').disabled=false;
+    document.getElementById('trainWarning').style.display='none';
+    btn.textContent='✓ Retrain Model';btn.disabled=false;
+  },300);
+}
+
+function metricBox(val,lbl){
+  return `<div class="metric-box"><div class="metric-val">${val}</div><div class="metric-lbl">${lbl}</div></div>`;
+}
+function reportRow(cls,prec,rec,f1,sup,bold=false){
+  const w=bold?'font-weight:500;':'';
+  function bar(v){
+    return `<span style="${w}">${v}%</span><span class="bar-wrap"><span class="bar-fill" style="width:${v}%"></span></span>`;
+  }
+  return `<tr style="${w}"><td style="color:var(--text);${w}">${cls}</td><td>${bar(prec)}</td><td>${bar(rec)}</td><td>${bar(f1)}</td><td style="color:var(--muted);">${sup}</td></tr>`;
+}
+
+// ─────────────────────────────────────────────
+// ANALYZE EMAIL
+// ─────────────────────────────────────────────
+
+function analyzeEmail(){
+  if(!trained){return;}
+  const text=document.getElementById('emailInput').value.trim();
+  if(!text){return;}
+
+  const features=extractFeatures(text,vocab,idf);
+  const proba=model.predictProba(features);
+  const pred=model.predict(features);
+  const confidence=(pred===1?proba[1]:proba[0])*100;
+  const urls=countUrls(text);
+  const kwFound=extractKeywordsFound(text);
+  const wordCount=text.split(/\s+/).length;
+
+  const isPhishing=pred===1;
+  const cls=isPhishing?'phishing':'safe';
+  const icon=isPhishing?'⚠':'🛡';
+  const verdict=isPhishing?'PHISHING DETECTED':'SAFE EMAIL';
+  const verdictCls=isPhishing?'phishing':'safe';
+  const confFillCls=isPhishing?'conf-fill-phish':'conf-fill-safe';
+
+  let signalHTML='';
+  if(isPhishing && kwFound.length){
+    signalHTML=`<div class="signal-list">${kwFound.map(k=>`<span class="signal-tag">${k}</span>`).join('')}</div>`;
+  } else if(!isPhishing){
+    signalHTML=`<div class="signal-list"><span class="signal-tag safe-tag">No phishing keywords</span>${urls===0?'<span class="signal-tag safe-tag">No suspicious URLs</span>':''}</div>`;
+  } else {
+    signalHTML=`<p class="no-signal">No specific keyword signals detected — classified by word pattern analysis.</p>`;
+  }
+
+  document.getElementById('resultBox').innerHTML=`
+    <div class="result-box ${cls}">
+      <div class="result-header">
+        <div class="result-icon">${icon}</div>
+        <div>
+          <div class="result-verdict ${verdictCls}">${verdict}</div>
+          <div class="result-conf">Confidence: ${confidence.toFixed(1)}%</div>
+        </div>
+      </div>
+      <div class="conf-bar-track"><div class="conf-bar-fill ${confFillCls}" style="width:${confidence.toFixed(0)}%"></div></div>
+      <div class="signals-title">Detection signals</div>
+      ${signalHTML}
+      <div class="feature-breakdown" style="margin-top:12px;">
+        <div class="fb-row"><span>URLs detected</span><span class="fb-val">${urls}</span></div>
+        <div class="fb-row"><span>Phishing keywords</span><span class="fb-val">${kwFound.length}</span></div>
+        <div class="fb-row"><span>Word count</span><span class="fb-val">${wordCount}</span></div>
+        <div class="fb-row"><span>Phishing probability</span><span class="fb-val">${(proba[1]*100).toFixed(1)}%</span></div>
+        <div class="fb-row"><span>Safe probability</span><span class="fb-val">${(proba[0]*100).toFixed(1)}%</span></div>
+      </div>
+    </div>`;
+
+  // Add to history
+  history.unshift({text:text.slice(0,60)+'…',verdict,cls,confidence});
+  if(history.length>10) history.pop();
+  renderHistory();
+}
+
+// ─────────────────────────────────────────────
+// HISTORY
+// ─────────────────────────────────────────────
+
+function renderHistory(){
+  const el=document.getElementById('historyList');
+  if(!history.length){
+    el.innerHTML='<p style="font-size:13px;color:var(--muted2);font-style:italic;">No emails analyzed yet.</p>';
+    return;
+  }
+  el.innerHTML=history.map((h,i)=>{
+    const dot=h.cls==='phishing'?'var(--phish)':'var(--safe)';
+    const badgeCls=h.cls==='phishing'?'label-phish':'label-safe';
+    return `<div class="history-item" onclick="loadHistory(${i})">
+      <div class="history-dot" style="background:${dot}"></div>
+      <div class="history-text">${h.text}</div>
+      <span class="${badgeCls} history-badge">${h.cls==='phishing'?'Phishing':'Safe'}</span>
+      <span style="font-size:11px;color:var(--muted2);">${h.confidence.toFixed(0)}%</span>
+    </div>`;
+  }).join('');
+}
+
+function loadHistory(i){
+  const h=history[i];
+  document.getElementById('emailInput').value=h.text.replace('…','');
+  switchTab('test', document.querySelectorAll('.tab')[2]);
+}
+
+// ─────────────────────────────────────────────
+// QUICK EXAMPLES
+// ─────────────────────────────────────────────
+
+const EXAMPLES={
+  phish1:"URGENT: Your bank account has been suspended due to suspicious activity. Click here immediately to verify your identity and restore access: http://secure-bank-verify.xyz/login. Failure to act within 24 hours will result in permanent account closure.",
+  phish2:"Congratulations! You have been selected as our lucky winner for a FREE $500 Amazon gift card! Click here to claim your prize before it expires: http://bit.ly/claim-free-prize2024. Limited offer — act now!",
+  safe1:"Hi John, hope you're doing well! Just wanted to confirm our meeting this Thursday at 3pm in conference room B. I'll send over the agenda this afternoon. Let me know if the time still works for you.",
+  safe2:"Your order has been successfully placed. Order number: ORD-987654. Expected delivery is between May 26-28. You can track your shipment from your account on our website. Thank you for shopping with us!"
+};
+
+function loadExample(key){
+  document.getElementById('emailInput').value=EXAMPLES[key];
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+
+function switchTab(id, btn){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if(btn && btn.classList) btn.classList.add('active');
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+
+renderDataset();
+</script>
+</body>
+</html>
